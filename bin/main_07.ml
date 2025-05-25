@@ -26,7 +26,11 @@ let equation_is_ok equation =
     | hd :: tl ->
       let acc_plus = acc + hd in
       let acc_times = acc * hd in
-      if aux acc_plus tl = res || aux acc_times tl = res then res else -1
+      (* Part 2 *)
+      let acc_concat = Int.to_string acc ^ Int.to_string hd |> Int.of_string in
+      if aux acc_plus tl = res || aux acc_times tl = res || aux acc_concat tl = res
+      then res
+      else -1
     | [] -> acc
   in
   aux 0 equation.ops = res
