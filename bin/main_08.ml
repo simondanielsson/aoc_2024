@@ -1,0 +1,85 @@
+open Base
+open Stdio
+
+let read () =
+  In_channel.input_all In_channel.stdin
+  |> String.split_lines
+  |> List.map ~f:String.to_array
+  |> Array.of_list
+;;
+
+(*
+   Initialize empty count matrix of same size with zeros everywhere
+Identify positions of each type of freq
+A: [(1,2 ), (3,4 )]
+
+For each frequency
+  For each pair 
+    node positions = calculate node positions within matrix
+    for each node position
+      increment count matrix at position
+
+sum up the count matrix
+*)
+
+type position =
+  { x : int
+  ; y : int
+  }
+[@@deriving sexp]
+
+let find_antennas matrix =
+  let matrix_lst = Array.map matrix ~f:List.of_array |> List.of_array |> List.concat in
+  let frequencies = Hash_set.of_list (module Char) matrix_lst in
+  Hash_set.remove frequencies '.';
+  Hash_set.fold frequencies ~init:[] ~f:(fun acc freq ->
+    let freq_acc = ref [] in
+    Array.iteri matrix ~f:(fun h row ->
+      Array.iteri row ~f:(fun w cell ->
+        if Char.equal cell freq then freq_acc := { x = w; y = h } :: !freq_acc));
+    !freq_acc :: acc)
+;;
+
+(* [ [ { x = 8; y = 1 }; { x = 5; y = 2 } ] ] *)
+
+let rec find_nodes acc antennas =
+  match antennas with
+  | hd :: tl ->
+    (* construct all combinations of hd and tl[i]*)
+    (* Find the node positions of each combination *)
+    let nodes =
+      List.fold tl ~init:[] ~f:(fun node_acc next ->
+        let x_diff = next.x - hd.x in
+        let y_diff = next.y - hd.y in
+        printf "x_diff=%d, y_diff=%d\n" x_diff y_diff;
+        let first_node = { x = hd.x - x_diff; y = hd.y - y_diff } in
+        let second_node = { x = next.x + x_diff; y = next.y + y_diff } in
+        first_node :: second_node :: node_acc)
+    in
+    let acc' = List.fold nodes ~init:acc ~f:(fun acc' node -> node :: acc') in
+    find_nodes acc' tl
+  | [] -> acc
+;;
+
+let count_antinodes matrix =
+  let width = Array.length matrix.(0) in
+  let height = Array.length matrix in
+  let count_matrix = Array.make_matrix ~dimx:width ~dimy:height 0 in
+  let antenna_positions = find_antennas matrix in
+  print_s [%sexp (antenna_positions : position list list)];
+  List.iter antenna_positions ~f:(fun antennas ->
+    let nodes = find_nodes [] antennas in
+    print_s [%sexp (nodes : position list)];
+    List.iter nodes ~f:(fun { x = w; y = h } ->
+      if 0 <= h && h <= height - 1 && 0 <= w && w <= width - 1
+      then count_matrix.(h).(w) <- 1));
+  print_s [%sexp (count_matrix : int array array)];
+  Array.fold count_matrix ~init:0 ~f:(fun acc row ->
+    Array.fold row ~init:acc ~f:(fun acc' cell -> acc' + cell))
+;;
+
+let () =
+  let start = Stdlib.Sys.time () in
+  let result = read () |> count_antinodes in
+  printf "Result: %d: ran in %f s\n" result (Stdlib.Sys.time () -. start)
+;;
