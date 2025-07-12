@@ -6,7 +6,7 @@ module Pos = struct
     { x : int
     ; y : int
     }
-  [@@deriving sexp_of, equal]
+  [@@deriving sexp_of, equal, compare, hash]
 
   let up r c = { x = c; y = r - 1 }
   let down r c = { x = c; y = r + 1 }
@@ -90,11 +90,51 @@ let compute_score matrix (trailhead : Pos.t) (graph : Pos.t list ref array array
   loop trailhead 0
 ;;
 
+let compute_score_part2 matrix (trailhead : Pos.t) (graph : Pos.t list ref array array) =
+  (* To a DFS until we reach a 9 node, then add 1 *)
+  let visited : Pos.t list ref = ref [] in
+  (* Store DFS tree *)
+  let parent = Hashtbl.create (module Pos) in
+  (* Store number of solutions from a given node *)
+  let num_solutions_from_node = Hashtbl.create (module Pos) in
+  let rec assign_solutions_to_node pos ~by =
+    Hashtbl.incr ~by num_solutions_from_node pos;
+    match Hashtbl.find parent pos with
+    | Some par -> assign_solutions_to_node par ~by
+    | None -> ()
+  in
+  let rec loop (Pos.{ x; y } as p) acc =
+    if matrix.(y).(x) = 9
+    then (
+      assign_solutions_to_node p ~by:1;
+      acc + 1)
+    else (
+      let neighbors = graph.(y).(x) in
+      List.fold !neighbors ~init:acc ~f:(fun acc' neighbor ->
+        if not (List.mem !visited neighbor ~equal:Pos.equal)
+        then (
+          let Pos.{ x = x'; y = y' } = neighbor in
+          printf "Visited (%d, %d)\n" y' x';
+          visited := neighbor :: !visited;
+          (* Construct the DFS tree *)
+          Hashtbl.add_exn parent ~key:neighbor ~data:p;
+          loop neighbor acc')
+        else (
+          let sols_at_node =
+            Hashtbl.find num_solutions_from_node neighbor |> Option.value ~default:0
+          in
+          assign_solutions_to_node p ~by:sols_at_node;
+          acc' + sols_at_node)))
+  in
+  loop trailhead 0
+;;
+
 let create_graph_and_compute_scores matrix =
   let trailheads = find_trailheads matrix in
   let graph = create_graph matrix in
+  ignore compute_score;
   List.fold trailheads ~init:[] ~f:(fun acc trailhead ->
-    compute_score matrix trailhead graph :: acc)
+    compute_score_part2 matrix trailhead graph :: acc)
 ;;
 
 let sum numbers =
