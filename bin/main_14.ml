@@ -1,10 +1,14 @@
 open Base
 open Stdio
 
+module IntPair = struct
+  type t = int * int [@@deriving sexp_of, compare, hash]
+end
+
 module Robot = struct
   type t =
-    { pos : int * int
-    ; dir : int * int
+    { pos : IntPair.t
+    ; dir : IntPair.t
     }
   [@@deriving sexp_of]
 end
@@ -67,6 +71,35 @@ let count_in_quadrants robots =
   List.of_array counts
 ;;
 
+(* Heuristic trick: christmas tree is visible once all robots are in unique positions.
+
+   This might just be lucky but it works :) *)
+let find_christmas_tree (robots : Robot.t list) : int =
+  let max_loops = 1_000_000 in
+  let rec loop = function
+    | 0 ->
+      failwith (Stdlib.Format.sprintf "no solutions found in %d iterations" max_loops)
+    | remaining ->
+      let seconds = max_loops - remaining in
+      let moved_robots =
+        List.map robots ~f:(fun r ->
+          Robot.
+            { r with
+              pos =
+                ( (fst r.pos + (seconds * fst r.dir)) % Constants.w
+                , (snd r.pos + (seconds * snd r.dir)) % Constants.h )
+            })
+      in
+      let set =
+        Hash_set.of_list (module IntPair) (List.map moved_robots ~f:(fun r -> r.pos))
+      in
+      if Hash_set.length set = List.length moved_robots
+      then seconds
+      else loop (remaining - 1)
+  in
+  loop max_loops
+;;
+
 (*
    p=(x0, y0)   v=(v1, v2)
   (2, 4)         (2, -3)
@@ -83,11 +116,16 @@ let count_in_quadrants robots =
   (4 - 15) % 7 = -11 % 7 = 3
 *)
 let () =
-  let result =
-    read ()
-    |> List.map ~f:move_robot
-    |> count_in_quadrants
-    |> List.fold ~init:1 ~f:(fun acc x -> acc * x)
-  in
+  (* p1 *)
+  (* let result = *)
+  (*   read () *)
+  (*   |> List.map ~f:move_robot *)
+  (*   |> count_in_quadrants *)
+  (*   |> List.fold ~init:1 ~f:(fun acc x -> acc * x) *)
+  (* in *)
+  ignore move_robot;
+  ignore count_in_quadrants;
+  (* p2 *)
+  let result = read () |> find_christmas_tree in
   printf "Result %d\n" result
 ;;
