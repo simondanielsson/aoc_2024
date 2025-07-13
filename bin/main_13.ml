@@ -7,6 +7,8 @@ module Coords = struct
     ; y : int
     }
   [@@deriving sexp_of]
+
+  let add ~amount t = if amount = 0 then t else { x = t.x + amount; y = t.y + amount }
 end
 
 module Button = struct
@@ -47,6 +49,9 @@ module Constants = struct
   let re_xy_eq = Re.Perl.compile_pat "X=(\\d+), Y=(\\d+)"
   let a_cost = 3
   let b_cost = 1
+
+  (* 0 for part 1 *)
+  let part2_offset = 10000000000000
 end
 
 let read () : Machine.t list =
@@ -68,7 +73,7 @@ let read () : Machine.t list =
       Machine.
         { button_A = Button.{ offsets = a_coords; cost = Constants.a_cost }
         ; button_B = { offsets = b_coords; cost = Constants.b_cost }
-        ; prize = prize_coords
+        ; prize = Coords.add ~amount:Constants.part2_offset prize_coords
         }
     in
     match lines with
@@ -78,68 +83,44 @@ let read () : Machine.t list =
     | [ a; b; prize ] -> parse_machine a b prize :: acc
     | _ -> failwith "invalid input format"
   in
-  (* TODO: remove *)
   List.rev @@ loop [] lines
 ;;
 
-let calculate_cost_dir a_offset_dir b_offset_dir prize =
-  let matrix_x =
-    Array.init 101 ~f:(fun a ->
-      Array.init 101 ~f:(fun b ->
-        match b, a with
-        | 0, 0 -> 0
-        | 0, _a -> _a * a_offset_dir
-        | _b, 0 -> _b * b_offset_dir
-        | _ -> -1))
-  in
-  let solutions = ref [] in
-  let rec loop a b : unit =
-    if b > Array.length matrix_x - 1
-    then loop (a + 1) (b - 1)
-    else if a > Array.length matrix_x.(0) - 1
-    then print_s [%sexp (matrix_x : int array array)]
-    else (
-      let value = (a * a_offset_dir) + (b * b_offset_dir) in
-      matrix_x.(a).(b) <- value;
-      if value = prize
-      then solutions := Solution.{ count_A = a; count_B = b } :: !solutions;
-      if value < prize && b < Array.length matrix_x - 1
-      then loop a (b + 1)
-      else loop (a + 1) 0)
-  in
-  loop 0 1;
-  !solutions
+(* Solve a 2x2 system of linear equations using Cramer's rule *)
+let solve_2x2 a11 a12 a21 a22 b1 b2 =
+  let det = (a11 *. a22) -. (a12 *. a21) in
+  if Float.( = ) det 0.0
+  then None
+  else (
+    let x = ((b1 *. a22) -. (b2 *. a12)) /. det in
+    let y = ((a11 *. b2) -. (a21 *. b1)) /. det in
+    if Float.(is_integer x && is_integer y)
+    then (
+      let a = Int.of_float x in
+      let b = Int.of_float y in
+      if Constants.part2_offset = 0
+      then if a > 100 || b > 100 then None else Some (a, b)
+      else Some (a, b))
+    else None)
 ;;
 
-let calculate_cost (machine : Machine.t) : int =
-  let x_sols =
-    calculate_cost_dir
-      machine.button_A.offsets.x
-      machine.button_B.offsets.x
-      machine.prize.x
+let calculate_cost_opt (machine : Machine.t) =
+  let open Option.Let_syntax in
+  let%map a, b =
+    solve_2x2
+      (Float.of_int machine.button_A.offsets.x)
+      (Float.of_int machine.button_B.offsets.x)
+      (Float.of_int machine.button_A.offsets.y)
+      (Float.of_int machine.button_B.offsets.y)
+      (Float.of_int machine.prize.x)
+      (Float.of_int machine.prize.y)
   in
-  let y_sols =
-    calculate_cost_dir
-      machine.button_A.offsets.y
-      machine.button_B.offsets.y
-      machine.prize.y
-  in
-  let x_set = Hash_set.of_list (module Solution) x_sols in
-  let y_set = Hash_set.of_list (module Solution) y_sols in
-  let common_sols = Hash_set.inter x_set y_set in
-  print_s [%sexp (x_sols : Solution.t list)];
-  print_s [%sexp (y_sols : Solution.t list)];
-  print_s [%sexp (common_sols : Solution.t Hash_set.t)];
-  if Hash_set.is_empty common_sols
-  then 0
-  else (
-    match
-      Hash_set.min_elt common_sols ~compare:(fun s1 s2 ->
-        Solution.cost s1 machine - Solution.cost s2 machine)
-    with
-    | Some sol -> Solution.cost sol machine
-    | None -> 0)
+  if a >= 0 && b >= 0
+  then Solution.cost Solution.{ count_A = a; count_B = b } machine
+  else 0
 ;;
+
+let calculate_cost machine = calculate_cost_opt machine |> Option.value ~default:0
 
 (* Find smallest cost to win as many prices as possible?
    Cost A: 3; Cost B: 1 
@@ -154,14 +135,21 @@ let calculate_cost (machine : Machine.t) : int =
   
   Typical linear program
 
-  Either pick A or not
+   C = (count_A ; count_B)
 
-  pick A if
-    (count_A - 1) * A_x + count_B*B_x = prize_X - A_x
-  
-  X and Y could be solved in parallel.
+   A_x  B_x  |  count_A       prize_x
+             |            =   
+   A_y  B_y  |  count_B       prize_y
 
-   No button to be pressed more than 100 times.
+   <=>
+
+   M c = P
+
+   =>
+
+   c = M^(-1) P
+
+   or since it's a 2x2 we can use Cramer's rule:
 *)
 let () =
   let result = read () |> List.sum (module Int) ~f:calculate_cost in
