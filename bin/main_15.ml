@@ -18,13 +18,39 @@ module Entity = struct
   ;;
 end
 
+module Entity_p2 = struct
+  type t =
+    | Robot
+    | Left_box
+    | Right_box
+    | Wall
+    | Empty
+  [@@deriving sexp_of, equal]
+
+  let of_entity (e : Entity.t) =
+    match e with
+    | Robot -> Robot, Empty
+    | Wall -> Wall, Wall
+    | Box -> Left_box, Right_box
+    | Empty -> Empty, Empty
+  ;;
+
+  let to_string = function
+    | Robot -> "@"
+    | Left_box -> "["
+    | Right_box -> "]"
+    | Wall -> "#"
+    | Empty -> "."
+  ;;
+end
+
 module Dir = struct
   type t =
     | Up
     | Down
     | Left
     | Right
-  [@@deriving sexp_of]
+  [@@deriving sexp_of, equal]
 
   let of_char = function
     | '^' -> Up
@@ -119,7 +145,136 @@ let calculate_score map =
   find_boxes map |> List.sum (module Int) ~f:score_box
 ;;
 
+(* Part 2 *)
+let upscale_map (map, dirs, _) =
+  (* Twice as wide *)
+  let robot_pos = ref (-1, -1) in
+  let create_upscaled_map map =
+    let orig_rows = Array.length map in
+    let orig_cols = Array.length map.(0) in
+    let upscaled_map =
+      Array.init orig_rows ~f:(fun _ ->
+        Array.init (orig_cols * 2) ~f:(fun _ -> Entity_p2.Empty))
+    in
+    Array.iteri map ~f:(fun r row ->
+      Array.iteri row ~f:(fun c entity ->
+        let e1, e2 = Entity_p2.of_entity entity in
+        upscaled_map.(r).(2 * c) <- e1;
+        upscaled_map.(r).((2 * c) + 1) <- e2;
+        match e1 with
+        | Robot -> robot_pos := r, 2 * c
+        | _ -> ()));
+    upscaled_map
+  in
+  let upscaled_map = create_upscaled_map map in
+  upscaled_map, dirs, !robot_pos
+;;
+
+let print_map map =
+  Array.iter map ~f:(fun row ->
+    Array.iter row ~f:(fun entity -> printf "%s" (Entity_p2.to_string entity));
+    print_endline "")
+;;
+
+let move_p2 (map, dirs, robot_pos) =
+  print_map map;
+  let robot = ref robot_pos in
+  printf "Robot at (%d, %d)\n" (fst !robot) (snd !robot);
+  let rec try_move dir (r, c) thunks =
+    let r', c' = Dir.next_pos dir (r, c) in
+    match map.(r').(c') with
+    | Empty ->
+      let thunk () = map.(r').(c') <- map.(r).(c) in
+      (* printf "Found empty at (%d, %d)\n" r' c'; *)
+      true, thunk :: thunks
+    | Wall -> false, []
+    | Right_box when Dir.equal dir Dir.Left || Dir.equal dir Dir.Right ->
+      (*As before *)
+      let move_valid, thunks = try_move dir (r', c') thunks in
+      if move_valid
+      then (
+        let thunk () = map.(r').(c') <- map.(r).(c) in
+        true, thunk :: thunks)
+      else false, []
+    | Left_box when Dir.equal dir Dir.Right || Dir.equal dir Dir.Left ->
+      (* Same as before *)
+      let move_valid, thunks = try_move dir (r', c') thunks in
+      if move_valid
+      then (
+        let thunk () = map.(r').(c') <- map.(r).(c) in
+        true, thunk :: thunks)
+      else false, []
+    | Left_box ->
+      (* Going up on a left box is valid if the box is not blocked above and above and right *)
+      let left_valid, left_thunks = try_move dir (r', c') thunks in
+      let right_valid, right_thunks = try_move dir (r', c' + 1) thunks in
+      if left_valid && right_valid
+      then (
+        let t1 () = map.(r').(c') <- map.(r).(c) in
+        let t2 () = map.(r').(c' + 1) <- map.(r).(c + 1) in
+        true, (t1 :: t2 :: left_thunks) @ right_thunks)
+      else false, []
+    | Right_box ->
+      (* Going up on a left box is valid if the box is not blocked above and above and right *)
+      let left_valid, left_thunks = try_move dir (r', c') thunks in
+      let right_valid, right_thunks = try_move dir (r', c' - 1) thunks in
+      if left_valid && right_valid
+      then (
+        let t1 () = map.(r').(c') <- map.(r).(c) in
+        let t2 () = map.(r').(c' - 1) <- map.(r).(c - 1) in
+        true, (t1 :: t2 :: left_thunks) @ right_thunks)
+      else false, []
+    | Robot -> failwith "unreachable state: found robot"
+  in
+  let set_empty (rr, rc) (dir : Dir.t) =
+    (* printf "Setting empty from (%d, %d)\n" rr rc; *)
+    match dir with
+    | Up when Entity_p2.equal map.(rr - 1).(rc) Left_box -> map.(rr).(rc + 1) <- Empty
+    | Up when Entity_p2.equal map.(rr - 1).(rc) Right_box -> map.(rr).(rc - 1) <- Empty
+    | Down when Entity_p2.equal map.(rr + 1).(rc) Left_box -> map.(rr).(rc + 1) <- Empty
+    | Down when Entity_p2.equal map.(rr + 1).(rc) Right_box -> map.(rr).(rc - 1) <- Empty
+    | _ -> () (*print_endline "no match"*)
+  in
+  (* Same as in part 1 *)
+  Sequence.iter dirs ~f:(fun dir ->
+    print_s [%sexp (dir : Dir.t)];
+    let valid_move, thunks = try_move dir !robot [] in
+    List.iter (List.rev thunks) ~f:(fun t -> t ());
+    (* printf "Tried moving: %s\n" (Dir.sexp_of_t dir |> Sexp.to_string); *)
+    (* printf "Valid move: %b\n" valid_move; *)
+    if valid_move
+    then (
+      let r, c = !robot in
+      map.(r).(c) <- Empty;
+      robot := Dir.next_pos dir !robot;
+      if List.length thunks > 1
+      then
+        set_empty !robot dir
+        (* printf "Robot at (%d, %d)\n" (fst !robot) (snd !robot) *));
+    print_map map;
+    ());
+  print_endline "After moving:";
+  print_map map;
+  map
+;;
+
+(* Same as for p1, but find left side of box *)
+let calculate_score_p2 map =
+  let find_boxes map =
+    Array.foldi map ~init:[] ~f:(fun r acc row ->
+      Array.foldi row ~init:acc ~f:(fun c acc' value ->
+        if Entity_p2.equal value Left_box then (r, c) :: acc' else acc'))
+  in
+  let score_box (r, c) = (100 * r) + c in
+  find_boxes map |> List.sum (module Int) ~f:score_box
+;;
+
 let () =
-  let result = read () |> move |> calculate_score in
+  (* Part 1 *)
+  ignore move;
+  ignore calculate_score;
+  (* let result = read () |> move |> calculate_score in *)
+  (* Part 2 *)
+  let result = read () |> upscale_map |> move_p2 |> calculate_score_p2 in
   printf "Result: %d\n" result
 ;;
