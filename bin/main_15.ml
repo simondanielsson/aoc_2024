@@ -180,11 +180,26 @@ let move_p2 (map, dirs, robot_pos) =
   print_map map;
   let robot = ref robot_pos in
   printf "Robot at (%d, %d)\n" (fst !robot) (snd !robot);
+  let set_empty r c = map.(r).(c) <- Empty in
+  let log r c r' c' =
+    printf
+      "Moving %s@(%d, %d) to (%d, %d), and setting former to .\n"
+      (Entity_p2.to_string map.(r).(c))
+      r
+      c
+      r'
+      c'
+  in
   let rec try_move dir (r, c) thunks =
     let r', c' = Dir.next_pos dir (r, c) in
     match map.(r').(c') with
     | Empty ->
-      let thunk () = map.(r').(c') <- map.(r).(c) in
+      printf "Found . at (%d, %d)\n" r' c';
+      let thunk () =
+        log r c r' c';
+        map.(r').(c') <- map.(r).(c);
+        set_empty r c
+      in
       (* printf "Found empty at (%d, %d)\n" r' c'; *)
       true, thunk :: thunks
     | Wall -> false, []
@@ -205,52 +220,78 @@ let move_p2 (map, dirs, robot_pos) =
         true, thunk :: thunks)
       else false, []
     | Left_box ->
+      printf "Found [ at (%d, %d)\n" r' c';
       (* Going up on a left box is valid if the box is not blocked above and above and right *)
       let left_valid, left_thunks = try_move dir (r', c') thunks in
       let right_valid, right_thunks = try_move dir (r', c' + 1) thunks in
       if left_valid && right_valid
       then (
-        let t1 () = map.(r').(c') <- map.(r).(c) in
-        let t2 () = map.(r').(c' + 1) <- map.(r).(c + 1) in
-        true, (t1 :: t2 :: left_thunks) @ right_thunks)
+        let t1 () =
+          log r c r' c';
+          map.(r').(c') <- map.(r).(c);
+          set_empty r c
+        in
+        let t2 () =
+          printf "pushing at [ with %d thunks in right\n" (List.length right_thunks);
+          log r (c + 1) r' (c' + 1);
+          if Entity_p2.equal map.(r).(c + 1) Empty
+          then (
+            map.(r').(c' + 1) <- map.(r).(c + 1);
+            set_empty r (c + 1))
+        in
+        true, (t1 :: t2 :: right_thunks) @ left_thunks)
       else false, []
     | Right_box ->
+      printf "Found ] at (%d, %d)\n" r' c';
       (* Going up on a left box is valid if the box is not blocked above and above and right *)
       let left_valid, left_thunks = try_move dir (r', c') thunks in
       let right_valid, right_thunks = try_move dir (r', c' - 1) thunks in
       if left_valid && right_valid
       then (
-        let t1 () = map.(r').(c') <- map.(r).(c) in
-        let t2 () = map.(r').(c' - 1) <- map.(r).(c - 1) in
+        let t1 () =
+          log r c r' c';
+          map.(r').(c') <- map.(r).(c);
+          set_empty r c
+        in
+        let t2 () =
+          log r (c - 1) r' (c' - 1);
+          if Entity_p2.equal map.(r).(c + 1) Empty
+          then (
+            map.(r').(c' - 1) <- map.(r).(c - 1);
+            set_empty r (c - 1))
+        in
         true, (t1 :: t2 :: left_thunks) @ right_thunks)
       else false, []
     | Robot -> failwith "unreachable state: found robot"
   in
-  let set_empty (rr, rc) (dir : Dir.t) =
-    (* printf "Setting empty from (%d, %d)\n" rr rc; *)
-    match dir with
-    | Up when Entity_p2.equal map.(rr - 1).(rc) Left_box -> map.(rr).(rc + 1) <- Empty
-    | Up when Entity_p2.equal map.(rr - 1).(rc) Right_box -> map.(rr).(rc - 1) <- Empty
-    | Down when Entity_p2.equal map.(rr + 1).(rc) Left_box -> map.(rr).(rc + 1) <- Empty
-    | Down when Entity_p2.equal map.(rr + 1).(rc) Right_box -> map.(rr).(rc - 1) <- Empty
-    | _ -> () (*print_endline "no match"*)
-  in
+  (* let set_empty (rr, rc) (dir : Dir.t) = *)
+  (*   (* printf "Setting empty from (%d, %d)\n" rr rc; *) *)
+  (*   match dir with *)
+  (*   | Up when Entity_p2.equal map.(rr - 1).(rc) Left_box -> map.(rr).(rc + 1) <- Empty *)
+  (*   | Up when Entity_p2.equal map.(rr - 1).(rc) Right_box -> map.(rr).(rc - 1) <- Empty *)
+  (*   | Down when Entity_p2.equal map.(rr + 1).(rc) Left_box -> map.(rr).(rc + 1) <- Empty *)
+  (*   | Down when Entity_p2.equal map.(rr + 1).(rc) Right_box -> map.(rr).(rc - 1) <- Empty *)
+  (*   | _ -> () (*print_endline "no match"*) *)
+  (* in *)
   (* Same as in part 1 *)
   Sequence.iter dirs ~f:(fun dir ->
     print_s [%sexp (dir : Dir.t)];
     let valid_move, thunks = try_move dir !robot [] in
-    List.iter (List.rev thunks) ~f:(fun t -> t ());
+    printf "Thunks: %d\n" (List.length thunks);
+    List.iter (List.rev thunks) ~f:(fun t ->
+      t ();
+      print_map map);
     (* printf "Tried moving: %s\n" (Dir.sexp_of_t dir |> Sexp.to_string); *)
     (* printf "Valid move: %b\n" valid_move; *)
     if valid_move
     then (
       let r, c = !robot in
       map.(r).(c) <- Empty;
-      robot := Dir.next_pos dir !robot;
-      if List.length thunks > 1
-      then
-        set_empty !robot dir
-        (* printf "Robot at (%d, %d)\n" (fst !robot) (snd !robot) *));
+      robot := Dir.next_pos dir !robot
+      (* if List.length thunks > 1 *)
+      (* then *)
+      (*   set_empty !robot dir *)
+      (* printf "Robot at (%d, %d)\n" (fst !robot) (snd !robot) *));
     print_map map;
     ());
   print_endline "After moving:";
