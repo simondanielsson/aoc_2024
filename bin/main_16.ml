@@ -49,7 +49,7 @@ module PosWithDist = struct
     }
   [@@deriving sexp_of]
 
-  let from_pair (cur : t) (neighbor : Pos.t) =
+  let with_total_dist (cur : t) (neighbor : Pos.t) =
     if Dir.equal cur.pos.dir neighbor.dir
     then { pos = neighbor; dist = cur.dist + Constants.straight_weight }
     else { pos = neighbor; dist = cur.dist + Constants.turn_weight }
@@ -148,7 +148,7 @@ let shortest_path (g, start, ends) =
       visited := cur.pos :: !visited;
       let neighbors = Hashtbl.find_exn g cur.pos in
       List.iter neighbors ~f:(fun neighbor ->
-        Pairing_heap.add heap (PosWithDist.from_pair cur neighbor));
+        Pairing_heap.add heap (PosWithDist.with_total_dist cur neighbor));
       let next = Pairing_heap.pop heap |> Option.value_exn in
       dijkstras next)
   in
