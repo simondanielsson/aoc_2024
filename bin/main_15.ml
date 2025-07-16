@@ -280,7 +280,7 @@ let move_p2 (map, dirs, robot_pos) =
     printf "Thunks: %d\n" (List.length thunks);
     List.iter (List.rev thunks) ~f:(fun t ->
       t ();
-      print_map map);
+      ());
     (* printf "Tried moving: %s\n" (Dir.sexp_of_t dir |> Sexp.to_string); *)
     (* printf "Valid move: %b\n" valid_move; *)
     if valid_move
@@ -292,7 +292,7 @@ let move_p2 (map, dirs, robot_pos) =
       (* then *)
       (*   set_empty !robot dir *)
       (* printf "Robot at (%d, %d)\n" (fst !robot) (snd !robot) *));
-    print_map map;
+    (* print_map map; *)
     ());
   print_endline "After moving:";
   print_map map;

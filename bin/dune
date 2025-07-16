@@ -1,5 +1,5 @@
 (executable
  (public_name aoc2024)
- (name main_15)
- (libraries aoc2024 base stdio re)
+ (name main_16)
+ (libraries aoc2024 base stdio re core_kernel.pairing_heap)
  (preprocess (pps ppx_jane)))
