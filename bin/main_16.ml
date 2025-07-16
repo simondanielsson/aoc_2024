@@ -74,9 +74,9 @@ module PosType = struct
     | _ -> failwith "invalid character"
   ;;
 
-  let isempty = function
+  let nonwall = function
     | Empty | Start | End -> true
-    | _ -> false
+    | Wall -> false
   ;;
 end
 
@@ -109,7 +109,7 @@ let create_graph (matrix : PosType.t array array) =
         Hashtbl.add_multi g ~key:this ~data:Pos.{ pos = r, c; dir = turn });
       (* Add move forward*)
       let r', c' = Pos.next this in
-      if within_bounds r' c' && PosType.isempty matrix.(r').(c')
+      if within_bounds r' c' && PosType.nonwall matrix.(r').(c')
       then Hashtbl.add_multi g ~key:this ~data:Pos.{ pos = r', c'; dir })
   in
   Array.iteri matrix ~f:(fun r row ->
