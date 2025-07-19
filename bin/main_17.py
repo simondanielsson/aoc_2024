@@ -1,5 +1,6 @@
 from enum import Enum
 import sys
+import copy
 from dataclasses import dataclass
 
 
@@ -104,20 +105,39 @@ def _read() -> tuple[State, list[Opcode | int]]:
     return State(A=A, B=B, C=C, ptr=0), program
 
 
-def main() -> int:
-    state, program = _read()
-    print(program)
+def inner(state, program) -> list[int]:
+    state = copy.deepcopy(state)
 
     outputs: list[int] = []
     while state.ptr < len(program):
         op, operand = program[state.ptr], program[state.ptr + 1]
-        print(f"{op=} {operand=} {state=}")
         state, output = _perform_op(op=op, operand=operand, state=state)
-        print(f"{op=} {operand=} new state={state} {output=}")
+
         if output is not None:
             outputs.append(output)
+            # print("outputs", outputs)
 
-    print(",".join(str(o) for o in outputs))
+    return outputs
+
+
+def main() -> int:
+    state, program = _read()
+    start_state = copy.deepcopy(state)
+    program_int = [p.value if isinstance(p, Opcode) else p for p in program]
+    print("testing state", state)
+
+    a_state = 0
+    for i in reversed(range(len(program))):
+        # print("Testing A =", a_state)
+        a_state <<= 3
+        state.A = a_state
+
+        while inner(state, program) != program_int[i:]:
+            a_state += 1
+            state.A = a_state
+
+    print(a_state)
+    # print(",".join(str(o) for o in outputs))
     return 0
 
 
