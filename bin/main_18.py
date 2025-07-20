@@ -61,7 +61,13 @@ def heappop[T](heap: list[T]) -> T | None:
         return None
 
 
-def dijsktras(neighbors: dict[tuple[int, int], list[tuple[int, int]]]) -> int:
+class NoSolutionError(Exception):
+    pass
+
+
+def dijsktras(
+    neighbors: dict[tuple[int, int], list[tuple[int, int]]],
+) -> tuple[int, tuple[int, int]]:
     # (dist, x, y) to utilize tuple comparison. This breaks tie by taking the leftmost element
     heap: list[tuple[int, int, int]] = []
     heapq.heapify(heap)
@@ -75,17 +81,33 @@ def dijsktras(neighbors: dict[tuple[int, int], list[tuple[int, int]]]) -> int:
         cur_dist, x, y = next
         cur_pos = (x, y)
         if cur_pos == end:
-            return cur_dist
+            return cur_dist, cur_pos
         elif cur_pos in visited:
             continue
         else:
-            print(f"Visiting {cur_pos}")
             visited.add(cur_pos)
             for neighbor in neighbors[cur_pos]:
                 dist_to_neighbor = cur_dist + 1
                 heapq.heappush(heap, (dist_to_neighbor, *neighbor))
 
-    raise ValueError("No path found")
+    raise NoSolutionError
+
+
+# Part 2
+# See next dropped byte
+# Remove this from the graph (both key and in neighbors)
+def _prune_graph(
+    pos: tuple[int, int],
+    grid: list[list[bool]],
+    graph: dict[tuple[int, int], list[tuple[int, int]]],
+) -> dict[tuple[int, int], list[tuple[int, int]]]:
+    if pos in graph:
+        del graph[pos]
+
+    for key, neighbors in graph.items():
+        graph[key] = [n for n in neighbors if n != pos]
+
+    return graph
 
 
 def main() -> int:
@@ -99,9 +121,21 @@ def main() -> int:
 
     graph = build_graph(grid=grid)
     pprint.pprint(graph)
-    shortest_path = dijsktras(neighbors=graph)
+    shortest_path, _ = dijsktras(neighbors=graph)
+    print("shortest path", shortest_path)
 
-    print(shortest_path)
+    # Part 2
+    solution = None
+    while solution is None:
+        x, y = [int(i) for i in input().split(",")]
+        grid[y][x] = True
+        graph = _prune_graph(pos=(x, y), grid=grid, graph=graph)
+        try:
+            dijsktras(graph)
+        except NoSolutionError:
+            solution = (x, y)
+
+    print("solution", solution)
 
     return 0
 
