@@ -1,4 +1,5 @@
 import io
+import functools
 import re
 import sys
 
@@ -24,7 +25,24 @@ def design_ok(design: str, towels: list[str]) -> bool:
     pattern = re.compile(f"^(?:{tower_pattern})+$")
 
     match = pattern.fullmatch(design)
+    if match:
+        for group in match.groups():
+            print(group)
     return bool(match)
+
+
+@functools.lru_cache()
+def count_configs(design: str, towels: tuple[str, ...]) -> int:
+    if not design:
+        return 1
+
+    acc = 0
+    for towel in towels:
+        if design.startswith(towel):
+            next = design[len(towel) :]
+            acc += count_configs(next, towels)
+
+    return acc
 
 
 def main() -> int:
@@ -32,9 +50,15 @@ def main() -> int:
     print("towels:", towels)
     print("designs:", designs)
 
-    design_is_ok = [design_ok(design, towels) for design in designs]
-    ok_designs = [is_ok for is_ok in design_is_ok if is_ok]
-    print("ok designs:", len(ok_designs))
+    # Part 1
+    # design_is_ok = [design_ok(design, towels) for design in designs]
+    # ok_designs = [is_ok for is_ok in design_is_ok if is_ok]
+    # print("ok designs:", len(ok_designs))
+
+    # Part 2
+    print(
+        f"Number configs: {sum(count_configs(design, tuple(towels)) for design in designs)}"
+    )
 
     return 0
 
